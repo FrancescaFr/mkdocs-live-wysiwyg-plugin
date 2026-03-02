@@ -1584,7 +1584,7 @@
         body = collapseRedundantReferenceToShortcut(body);
       }
       body = stripCursorSpanHtml(body).replace(CURSOR_UNICODE_RE, '');
-      return parsed.frontmatter ? serializeWithFrontmatter(parsed.frontmatter, body) : body;
+      return body;
     };
   })();
 
