@@ -1,9 +1,14 @@
 name: Publish to PyPI
 
+# Always publish to PyPI when a version tag (v*) is pushed.
 on:
   push:
     tags:
       - 'v*'
+
+concurrency:
+  group: pypi-publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
