@@ -1,10 +1,13 @@
 name: Publish to PyPI
 
 # Always publish to PyPI when a version tag (v*) is pushed.
+# workflow_dispatch allows the release workflow to trigger this when it pushes a tag
+# (tag pushes from GITHUB_TOKEN do not trigger workflows).
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 concurrency:
   group: pypi-publish-${{ github.ref }}

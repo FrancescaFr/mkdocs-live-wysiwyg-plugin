@@ -88,6 +88,8 @@ git push origin v0.1.0
 
 The `.github/workflows/publish.yml` workflow publishes to PyPI on tag push (e.g. `v0.1.0`) using [PyPI Trusted Publishers](https://docs.pypi.org/trusted-publishers/) (OIDC). No API token is stored in GitHub.
 
+**Note:** Tag pushes made by the release workflow (using `GITHUB_TOKEN`) do not trigger other workflows. The release workflow explicitly invokes the publish workflow after pushing the tag.
+
 **Setup:**
 
 1. In PyPI project settings, add a trusted publisher: [https://pypi.org/manage/project/mkdocs-live-wysiwyg-plugin/settings/publishing/](https://pypi.org/manage/project/mkdocs-live-wysiwyg-plugin/settings/publishing/)
