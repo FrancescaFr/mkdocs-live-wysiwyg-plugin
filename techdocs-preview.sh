@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # since rapidly developing I'll track this at the top for now
-WYSIWYG_VERSION=0.2.5
+WYSIWYG_VERSION=0.3.1
 YML_INSTALL_FILES_VERSION="v3.8"
 
 # GITHUB_DOWNLOAD_MIRROR=...
@@ -61,7 +61,7 @@ utility:
     arch:
       Darwin:
         arm64: aarch64
-    download: https://github.com/astral-sh/uv/releases/download/${version}/uv-${arch}-${os}.tar.gz
+    download: '${GITHUB_DOWNLOAD_MIRROR:-https://github.com}/astral-sh/uv/releases/download/${version}/uv-${arch}-${os}.tar.gz'
     extract: tar -xzC ${dest}/ --no-same-owner --strip-components=1 uv-${arch}-${os}/uv
   yq:
     <<: *defaults
@@ -73,7 +73,7 @@ utility:
       aarch64: arm64
       Darwin:
         i386: amd64
-    download: https://github.com/mikefarah/yq/releases/download/v${version}/yq_${os}_${arch}
+    download: '${GITHUB_DOWNLOAD_MIRROR:-https://github.com}/mikefarah/yq/releases/download/v${version}/yq_${os}_${arch}'
 UV_DOWNLOAD_YAML
 }
 
