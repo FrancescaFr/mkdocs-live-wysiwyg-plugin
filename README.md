@@ -33,7 +33,16 @@ See [shortcuts and behaviors document](docs/shortcuts.md) for how to edit docume
 
 When you click "Edit" in the live-edit plugin, this plugin replaces the plain textarea with a rich WYSIWYG editor.
 
-<div data-live-wysiwyg-raw-html-block="PGRldGFpbHM+PHN1bW1hcnk+U2NyZWVuc2hvdHM8L3N1bW1hcnk+CgohW2VkaXRvci1saWdodF0oZG9jcy9pbWFnZXMvZWRpdG9yLWxpZ2h0LnBuZykKCiFbZWRpdG9yLWRhcmtdKGRvY3MvaW1hZ2VzL2VkaXRvci1kYXJrLnBuZykKCiFbZm9jdXMtY29udGVudF0oZG9jcy9pbWFnZXMvZm9jdXMtY29udGVudC5wbmcpCgohW2ZvY3VzLWJ1c3ldKGRvY3MvaW1hZ2VzL2ZvY3VzLWJ1c3kucG5nKQoKPC9kZXRhaWxzPg==" data-live-wysiwyg-newlines-after="1"></div>
+![focus-busy](docs/images/focus-busy.png)
+
+<details>
+<summary>More Screenshot</summary>
+
+![editor-dark](docs/images/editor-dark.png)
+
+![focus-content](docs/images/focus-content.png)
+
+</details>
 
 ## Requirements
 
