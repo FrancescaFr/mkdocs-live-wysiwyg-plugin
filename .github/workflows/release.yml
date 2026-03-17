@@ -35,11 +35,30 @@ jobs:
         id: version
         run: echo "version=$(grep -oP '^version = "\K[^"]+' pyproject.toml)" >> $GITHUB_OUTPUT
 
+      - name: Update WYSIWYG_VERSION in techdocs-preview.sh
+        run: sed -i 's/^WYSIWYG_VERSION=[.0-9]*/WYSIWYG_VERSION=${{ steps.version.outputs.version }}/' techdocs-preview.sh
+
+      - name: Sync download-utilities.yml into techdocs-preview.sh
+        run: |
+          python3 << 'PYEOF'
+          with open('techdocs-preview.sh') as f:
+              script = f.read()
+          with open('.github/download-utilities.yml') as f:
+              yaml_content = f.read()
+          start_marker = "cat <<'UV_DOWNLOAD_YAML'\n"
+          end_marker = "\nUV_DOWNLOAD_YAML"
+          start_idx = script.index(start_marker) + len(start_marker)
+          end_idx = script.index(end_marker, start_idx)
+          script = script[:start_idx] + yaml_content.rstrip('\n') + script[end_idx:]
+          with open('techdocs-preview.sh', 'w') as f:
+              f.write(script)
+          PYEOF
+
       - name: Commit and tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pyproject.toml
+          git add pyproject.toml techdocs-preview.sh
           git commit -m "chore: release v${{ steps.version.outputs.version }}"
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
 
