@@ -13,7 +13,7 @@ Browser native undo (`document.execCommand('undo')` / textarea undo) is mode-spe
 - **WYSIWYG mode**: the contenteditable undo stack tracks DOM mutations. Mode switches, `innerHTML` assignments, and DOM reparenting during nav edit transitions destroy the stack.
 - **Markdown mode**: the textarea undo stack tracks text changes. Switching to WYSIWYG mode replaces the textarea content programmatically, which either clears or corrupts the stack.
 
-After any mode switch or nav edit transition, `Cmd+Z` does nothing. The user loses their entire editing history.
+After any mode switch or nav edit transition, `Cmd+Z` does nothing. The user loses their entire editing history. Browser-specific behavior of `execCommand('undo')` and contenteditable undo stacks is documented in [DESIGN-browser-compatibility.md](DESIGN-browser-compatibility.md).
 
 ## Architecture
 
@@ -116,6 +116,7 @@ Grouping only applies when an entire construct appears or disappears in one diff
 | Nav edit mode entry | `_enterNavEditMode` |
 | Paste | `ea.addEventListener('paste', ...)` handlers |
 | Toolbar format commands | `_handleToolbarClick`, `_insertCodeBlock`, `_wrapSelectionInBlockquote`, etc. |
+| Nav menu drag-and-drop | `ea.addEventListener('drop', ...)` handler |
 
 ### Corruption Guard
 
@@ -134,7 +135,7 @@ This prevents storing diffs that would produce corrupted content on undo/redo re
 1. If `_historyCurrentId` is the root node, do nothing
 2. Flush any pending capture (so current typing is saved as a node first)
 3. Get current node's diff, reverse-apply to reconstruct parent's markdown
-4. Set editor content via `_loadContent()` (works in whichever mode is active)
+4. Set editor content via `_historyApplyContent()` (works in whichever mode is active). This refreshes all preprocess data stores and runs DOM enhancers per the [Markdown Awareness](DESIGN-markdown-awareness.md) contract.
 5. Restore cursor from parent node's stored cursor
 6. Set `_historyCurrentId = parentId`, update `_historyLastMd` cache
 
@@ -176,10 +177,20 @@ On restore (`_restoreHistoryCursor(cursor, diff, mdContent, isRedo)`):
 
 ## Keyboard Integration
 
-In `_globalKeydownRouter`, all `Cmd+Z` / `Cmd+Shift+Z` / `Cmd+Y` handling is unified in a single dispatch block that runs regardless of `_navEditMode` state:
+Undo/redo is intercepted at two levels to ensure cross-browser compatibility:
+
+### `beforeinput` listener (WYSIWYG mode — primary for Safari)
+
+A `beforeinput` listener on the editable area intercepts `inputType === 'historyUndo'` and `inputType === 'historyRedo'`. This fires **before** the browser applies the native contenteditable undo/redo action, which is critical for Safari where the native undo executes before the `keydown` event fires. The listener calls `e.preventDefault()` and dispatches to `_contentUndo()` / `_contentRedo()`. A flag (`_undoViaBeforeinput`) prevents the subsequent `keydown` handler from double-dispatching.
+
+### `keydown` handler (Tier 2 — all modes)
+
+In `_globalKeydownRouter`, all `Cmd+Z` / `Cmd+Shift+Z` / `Cmd+Y` handling is unified in a single dispatch block that runs regardless of `_navEditMode` state. If the `beforeinput` listener already handled the event, the `keydown` handler skips dispatch and only calls `preventDefault()` + `stopImmediatePropagation()`.
 
 1. **Content focus** (`TEXTAREA`, `INPUT`, or `contentEditable`): always dispatches to `_contentUndo()` / `_contentRedo()`. This works in both nav edit mode and normal mode, and is not gated by `dialogOpen` (so it works even when a link edit dialog is open).
 2. **No content focus, no dialog open**: dispatches to `_navUndo()` / `_navRedo()` for nav snapshot undo.
+
+The `keydown` handler remains necessary for markdown mode (textarea does not fire `beforeinput` with `historyUndo`) and as a fallback for browsers that do not support `beforeinput` input types.
 
 ## Lifecycle
 
@@ -215,6 +226,16 @@ Content undo and nav snapshot undo are completely independent:
 | **Survives nav edit** | Yes (JS array in memory) | N/A (is the nav edit system) |
 
 They never conflict: dispatch is determined solely by whether the active element is a content editor (`TEXTAREA`, `INPUT`, or `contentEditable`). Content focus always wins, regardless of `_navEditMode` state.
+
+## Relationship to Markdown Awareness
+
+`_historyApplyContent` must fulfill the [Markdown Awareness](DESIGN-markdown-awareness.md) content-loading contract. After restoring content:
+
+1. **Preprocess stores are refreshed** from the restored markdown (`extractRefDefsFromCommentBlocks` then all 6 explicit preprocessors). This ensures subsequent `getValue()` calls use postprocessors that match the current content, preserving advanced code block fences, list markers, and other formatting.
+
+2. **DOM enhancers run** in WYSIWYG mode (`populateRawHtmlBlocks`, `enhanceCodeBlocks`, `enhanceBasicPreBlocks`, `enhanceChecklists`, `enhanceAdmonitions`, `enhanceImages`). This ensures code blocks have their `.md-code-block` wrappers, title bars, and line number gutters after undo/redo — matching the same enhanced DOM that `setValue` and `switchToMode` produce.
+
+The double render check (`_doubleRenderCheck`) is the corruption guard that prevents the Markdown Awareness round-trip from storing corrupted diffs. See [DESIGN-markdown-awareness.md](DESIGN-markdown-awareness.md) for the full contract.
 
 ## Rules
 

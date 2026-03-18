@@ -31,7 +31,7 @@ Focus Mode replicates the Material theme's three-column grid layout:
 
 | Focus Mode Element | Emulates | Key Dimensions |
 |---|---|---|
-| `.live-wysiwyg-focus-overlay` | Full page | `position:fixed; inset:0; z-index:999` |
+| `.live-wysiwyg-focus-overlay` | Full page | `position:fixed; inset:0; z-index:99990` |
 | `.live-wysiwyg-focus-header` | `md-header md-header--shadow` | `height:2.4rem; background-color:var(--md-primary-fg-color)` |
 | `.live-wysiwyg-focus-header-title` | `md-header__title` | `flex-grow:1; font-size:.9rem; line-height:2.4rem` |
 | `.live-wysiwyg-focus-header-ellipsis` | `md-header__ellipsis` | `height:100%; position:relative` |
@@ -68,7 +68,7 @@ Browser fullscreen exit does **not** auto-exit focus mode. The user must explici
 ## Overlay Structure
 
 ```
-div.live-wysiwyg-focus-overlay (position:fixed, inset:0, z-index:999)
+div.live-wysiwyg-focus-overlay (position:fixed, inset:0, z-index:99990)
 ├── div.live-wysiwyg-focus-header (md-header style)
 │   ├── div.live-wysiwyg-focus-header-left
 │   │   ├── button.live-wysiwyg-focus-nav-toggle (hamburger rotated 90°)
@@ -338,7 +338,7 @@ Called **after** reparenting completes and the overlay/normal layout is settled.
 
 ### Why Direct Range Restore Works
 
-`enterFocusMode` and `exitFocusMode` reparent the editor wrapper — they move DOM nodes between parents using `appendChild` / `insertBefore`. The nodes themselves are never cloned or recreated. A `Range` whose `startContainer` / `endContainer` point into these nodes remains valid after reparenting because the node references don't change. This makes direct `Range` restore the fastest and most reliable mechanism.
+`enterFocusMode` and `exitFocusMode` reparent the editor wrapper — they move DOM nodes between parents using `appendChild` / `insertBefore`. The nodes themselves are never cloned or recreated. A `Range` whose `startContainer` / `endContainer` point into these nodes remains valid after reparenting because the node references don't change. This makes direct `Range` restore the fastest and most reliable mechanism. Safari and other browsers may have quirks with Range/Selection after DOM operations; see [DESIGN-browser-compatibility.md](DESIGN-browser-compatibility.md).
 
 ## Invariants
 
@@ -361,3 +361,17 @@ Called **after** reparenting completes and the overlay/normal layout is settled.
 17. All three toggle states (nav, toolbar, TOC) persist across page reloads and focus mode re-entry via `_getSetting`/`_setSetting`
 18. Dead link panel auto-expands a collapsed TOC before positioning (`_ensureTocUncollapsed`)
 19. AJAX navigation in focus mode avoids full page reloads — content is fetched via WebSocket and loaded in place
+
+## Layout Subsystem
+
+Grid dimensions, reparenting lifecycle, scroll containers, z-index stacking, sidebar widths, responsive breakpoints, and animation timing are governed by the Layout subsystem. See [DESIGN-layout.md](DESIGN-layout.md) for the authoritative contracts.
+
+## Scroll Isolation
+
+When focus mode is active, document-level scrolling is completely suppressed:
+
+- `document.body.style.overflow` and `document.documentElement.style.overflow` are both set to `'hidden'` on entry
+- Both values are saved before entry and restored on exit
+- `.live-wysiwyg-focus-main` uses `overscroll-behavior: contain` to prevent scroll chaining from the focus overlay to the underlying page
+
+This is required by the Mode Hierarchy suppression contract (see [DESIGN-modes-of-operation.md](DESIGN-modes-of-operation.md)). All scroll interactions in focus mode must target `.live-wysiwyg-focus-main`, not `document` or `window`.

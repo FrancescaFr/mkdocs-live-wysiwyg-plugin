@@ -29,6 +29,16 @@ All movement flows through `_handleArrowClick(item, itemType, direction, shiftKe
 
 `_handleArrowClick` determines the move variant and delegates to `_doArrowMove`, which calls the appropriate movement function.
 
+### Nav-key arrow guard
+
+When `_ymlHasNavKey(_virtualMkdocsYml)` is true (mkdocs.yml has a hand-written `nav:` key), arrow movement is blocked at the top of `_handleArrowClick`:
+
+1. The move is a no-op; no movement function is called
+2. `_seedNavKeyMigrationWarning()` adds a top-level warning (idempotent) to inform the user that manual nav ordering is incompatible with arrow-based movement
+3. `_pushNavKeyItemWarning(item)` shows a transient tooltip on the clicked item
+
+When there is no nav key, arrows work regardless of nav-weight status. Gear operations (rename, delete, create) are not blocked by the nav key and work regardless of nav key or nwConfig status.
+
 ### Movement functions
 
 | Function | Trigger | Effect |
@@ -310,3 +320,299 @@ A parent-level class `live-wysiwyg-nav-group-active` on `_navSidebarEl` activate
 11. **Group CSS uses `visibility: hidden` for non-focal controls.** This preserves horizontal spacing so items don't shift position when controls are hidden. Only the focal item's target icon and settings gear use `display: none`. All visual state derives from navData properties applied by the renderer.
 
 12. **Snapshots capture group moves atomically.** A single `_commitNavSnapshot` is called after all items in the group are placed. Undo reverts the entire group move in one step.
+
+## Dialog & Settings Rendering Rules
+
+This section documents every dialog, dropdown, and popup that the navigation sidebar can produce. Each subsection specifies the trigger, the fields/buttons rendered, and how the layout changes based on item type and state.
+
+### Layout Notation
+
+ASCII renderings use the following notation:
+
+| Notation | Meaning |
+|----------|---------|
+| `(button name)` | A button that fills available width |
+| `(-button-)` | A fixed-width button, sized to its text |
+| `---` | A horizontal divider |
+| `Label [text area]` | A label with an adjacent text/number input |
+| `[ ] Label` | An unchecked checkbox |
+| `[x] Label` | A checked checkbox |
+| Bare text | Static label or message text |
+
+### Settings Gear Dropdown
+
+Function: `_buildSettingsContent`. Triggered by clicking the gear icon on a nav item. Nav controls (arrows + gear) are always rendered for every nav item regardless of nav-weight status or nav key.
+
+The dropdown has 5 distinct rendering variants based on item type and 2 sub-variants based on `nwConfig.enabled` for the page and section-with-index cases.
+
+#### Page (non-root, non-index) — `nwConfig.enabled`
+
+```
+Title [text area]
+File name [text area]
+---
+Weight [text area]
+[ ] Headless
+---
+(Normalize Weights)
+(-Delete-) (Apply)
+```
+
+When the page has `headless: true` initially, the weight row is hidden and the checkbox is pre-checked:
+
+```
+Title [text area]
+File name [text area]
+---
+[x] Headless
+---
+(Normalize Weights)
+(-Delete-) (Apply)
+```
+
+Unchecking Headless reveals the weight row with a computed unhide weight (`_computeUnhideWeight`).
+
+File name input is constrained to `[a-z0-9-]`. Changing the file name and clicking Apply triggers an implicit rename (the rename is stored on the dropdown and processed by `_applySettingsGearChanges`).
+
+#### Page (non-root, non-index) — `nwConfig` disabled
+
+```
+Title [text area]
+File name [text area]
+---
+(-Delete-) (Apply)
+```
+
+No Weight, Headless, or Normalize Weights. File name row is always shown.
+
+#### Section with index (non-root) — `nwConfig.enabled`
+
+```
+Title [text area]
+Folder name [text area]
+---
+Weight [text area] [ ] Headless
+[ ] Retitled [ ] Empty
+---
+(Normalize Weights)
+(-Delete-) (Apply)
+```
+
+Unlike pages, the Headless checkbox shares its row with the Weight input. Headless does not hide the weight row for sections.
+
+Retitled and Empty checkboxes appear because sections with an index have `effectiveIsIndex: true`.
+
+Folder name input is constrained to `[a-z0-9-]`. Changing the folder name and clicking Apply triggers an implicit folder rename (stored on the dropdown).
+
+#### Section with index (non-root) — `nwConfig` disabled
+
+```
+Title [text area]
+Folder name [text area]
+---
+(-Delete-) (Apply)
+```
+
+No Weight, Headless, Retitled/Empty, or Normalize Weights. Folder name row is always shown.
+
+#### Indexless section (no index.md)
+
+Layout is the same regardless of `nwConfig`:
+
+```
+Folder name [text area]
+---
+(Create folder index)
+(-Delete-) (Rename Folder)
+```
+
+No Title, Weight, Headless, or Retitled/Empty fields. The `noIndexSection` flag triggers an early return with this dedicated action set.
+
+Rename Folder button is disabled when the input is empty or unchanged from the current folder name.
+
+Create folder index creates an `index.md` with `retitled: true`, `empty: true`, and the configured default index weight.
+
+#### Asset
+
+Layout is the same regardless of `nwConfig`:
+
+```
+File name [text area]
+---
+(-Delete-) (Rename File)
+```
+
+No Title, Weight, or Headless. Asset file names are not constrained to `[a-z0-9-]` (preserves original filename characters including extensions).
+
+Rename File button is disabled when the input is empty or unchanged.
+
+#### Root index (page or section with `src_path === 'index.md'`)
+
+Layout is the same regardless of `nwConfig`:
+
+```
+Title [text area]
+---
+(Apply)
+```
+
+No File name, Weight, Headless, Retitled/Empty, Normalize Weights, or Delete. The root index page cannot be deleted or reweighted through the settings gear.
+
+#### Settings gear rendering rules
+
+13. **Five rendering variants.** `_buildSettingsContent` branches into 5 item-type variants: page, section-with-index, indexless section, asset, and root index. Indexless section and asset take early-return paths with their own action buttons. Page and section-with-index share the Normalize/Delete/Apply action row.
+
+14. **Title row requires frontmatter.** The Title field is shown when `hasFrontmatter` is true (all pages and sections-with-index, but not assets or indexless sections).
+
+15. **File name row is always shown for pages and assets.** Pages: shown when `!_isRootIndex(item)`. Assets: always shown. Not shown for sections.
+
+16. **Folder name row is always shown for sections.** Requires `itemType === 'section' && !isRootIndexItem` and `folderDir` must exist. Shown regardless of `nwConfig.enabled` or `noIndexSection`.
+
+17. **Weight row requires nwConfig.** Weight, Headless, Retitled/Empty, and Normalize Weights are shown only when `nwConfig.enabled`. For pages and sections-with-index that are not the root index, these fields are gated behind nav-weight configuration.
+
+18. **Headless layout differs between pages and sections.** For pages, Headless gets its own row below Weight. For sections, Headless is appended to the Weight row. For pages with `headless: true` initially, the Weight row is hidden until the user unchecks Headless.
+
+19. **Retitled and Empty require index status.** Shown only when `nwConfig.enabled && effectiveIsIndex`. `effectiveIsIndex` is true for all sections and for pages with `isIndex: true`.
+
+20. **Rename is implicit via Apply for pages and sections-with-index.** Changing the File name or Folder name input and clicking Apply triggers a rename operation. The rename inputs are stored on the dropdown object for `_applySettingsGearChanges` to read.
+
+21. **Rename is explicit for indexless sections and assets.** These variants have a dedicated Rename Folder or Rename File button that is disabled until the input changes from its original value.
+
+22. **Delete is absent for root index.** The root index page cannot be deleted from the settings gear. All other item types (page, section, indexless section, asset) have a Delete button.
+
+23. **Normalize Weights requires nwConfig and non-root.** The button is shown only when `nwConfig.enabled && !isRootIndexItem`. For sections, normalization targets the section itself. For pages, it targets the parent section.
+
+### Arrow Control Rules
+
+Arrow controls (up, down, left, right) are rendered by `_createNavWeightControls` alongside the gear icon. Their visibility and enabled state depend on item type and depth.
+
+24. **Root index hides all arrows.** All four arrow buttons have `display: none`. The root index cannot be moved.
+
+25. **Depth-0 items hide the left arrow.** Items at the top level of the nav tree have no parent to move out of. The left arrow uses `visibility: hidden` (not `display: none`) to preserve layout spacing.
+
+26. **All arrows are always enabled.** Arrow buttons are never disabled based on nav-weight status. When `_ymlHasNavKey` is true, movement is blocked at runtime in `_handleArrowClick` (see Nav-key arrow guard); the arrows remain visible and clickable.
+
+27. **Assets hide the target-dot button.** The target-dot icon (used to navigate to the page) is hidden for assets since they are not navigable pages.
+
+### Create New Folder Dialog
+
+Function: `_promptNewFolder`. Category: form dialog. Triggered by Shift+Right arrow or Right arrow when no adjacent section is available.
+
+#### Page variant
+
+```
+Create a new folder for this page:
+Folder name [text area]
+Display name [text area]
+[ ] Only create folder
+(Cancel) (Create)
+```
+
+Folder name defaults to the page title slugified to `[a-z0-9-]`. Display name defaults to the page title.
+
+#### Asset variant
+
+```
+Create a new folder for this file:
+Folder name [text area]
+[x] Only create folder
+(Cancel) (Create)
+```
+
+"Only create folder" is pre-checked for assets. The Display name row is hidden when the checkbox is checked. Folder name defaults to the asset filename (without extension) slugified.
+
+#### Create new folder rules
+
+28. **"Only create folder" toggles Display name visibility.** When checked, the Display name row is hidden and the created section will be indexless (`skipIndex: true`). When unchecked, an index.md is created with the Display name as its title.
+
+29. **Folder name input is constrained to `[a-z0-9-]`.** Characters outside this range are stripped on input.
+
+### Rename Page Dialog
+
+Function: `_showRenameDialog`. Category: form dialog. Triggered by the Page Management submenu "Rename Page" item. Always operates on the current page.
+
+```
+Rename this page:
+File name [text area]
+Title [text area]
+(Cancel) (Rename)
+```
+
+File name input is constrained to `[a-z0-9-]` and defaults to the current filename without `.md`. Title defaults to the current page title. No item-type variants — this dialog only fires for the current page.
+
+### New Page Dialog
+
+Function: `_showNewPageDialog`. Category: form dialog. Triggered by the Page Management submenu "New Page" or the Empty Folder Popup "New Child Page".
+
+```
+Create a new page:
+File name [text area]
+Title [text area]
+Weight [text area]
+Content (optional) [text area]
+(Cancel) (Create)
+```
+
+Weight is pre-filled with `max(sibling weights) + 100` or the configured default weight if no siblings have weights. When called from the Empty Folder Popup, `optionalFolderDir` sets the target directory for the new page.
+
+### Empty Folder Popup
+
+Function: `_showEmptyFolderPopup`. Category: confirmation dialog. Triggered by clicking the empty-folder caution icon on a section where `_isSectionEmpty` returns true.
+
+```
+This folder is empty (or only has a placeholder index). Choose an action:
+(Delete Folder) (New Child Page) (Convert Folder to Page)
+```
+
+A section is empty when it has no assets, no subsections, and either zero pages or exactly one index page with `retitled: true` and `empty: true`.
+
+"New Child Page" opens the New Page Dialog with the folder's directory as `optionalFolderDir`. "Convert Folder to Page" calls `_convertFolderToPage`, which moves the index.md up one level as a standalone page.
+
+### Informational Popups
+
+Function: `_showNavPopup`. These are message-only popups with no action buttons.
+
+**Weight exceeds default** — shown when a non-root-index page has `weight > defaultPageWeight`:
+
+```
+This page's weight (NNN) exceeds the default page weight (MMM).
+```
+
+**Unweighted page** — shown when a non-root-index page has `weight == null`:
+
+```
+This page has no nav weight assigned.
+```
+
+### Page Management Submenu
+
+Function: `_createPageSubmenu`. Triggered by clicking the "Content" button in the focus mode toolbar. No item-type variants — the submenu is always the same.
+
+```
+(Rename Page)
+(New Page)
+(Delete Current Document)
+(Normalize All Nav Weights)
+(Find Dead Links)
+```
+
+"Find Dead Links" opens a nested confirmation dialog:
+
+```
+Scan for dead links:
+(All) (Internal) (External) (Cancel)
+```
+
+### Review Changes Popup
+
+Function: `_showReviewChangesPopup`. Triggered by clicking the "Review changes" badge in the nav actions bar. Displays a list of pending operation badges and items marked for deletion. Dismissed by clicking outside. No action buttons — the popup is informational.
+
+### Cross-Cutting Visibility Gates
+
+These conditions affect whether nav controls (arrows + gear) render at all, independent of the dialog content rules above.
+
+30. **Nav controls always render.** Arrows and gear are always created for every nav item regardless of nav-weight status or nav key. The `nwConfig.enabled` and `_ymlHasNavKey` gates have been removed from `_buildNavItems`. When `_ymlHasNavKey` is true, arrow movement is blocked at runtime in `_handleArrowClick`; the controls remain visible.
+
+31. **Top warnings are lazily seeded.** The top warning area starts empty on page load. `_seedNavTopWarnings` no longer adds proactive "pip install" or "migrate" warnings. The nav-key migration warning is seeded lazily by `_seedNavKeyMigrationWarning()` on the first arrow attempt when `_ymlHasNavKey` is true.
+
+32. **Deleted items are not rendered.** Items with `_deleted: true` are skipped entirely by `_buildNavItems`. No controls, gear, or caution icons are produced for deleted items.

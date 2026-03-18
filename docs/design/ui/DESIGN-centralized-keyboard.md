@@ -30,6 +30,9 @@ flowchart TD
         EKR --> ArrowGroup["Arrows: checklist nav"]
         EKR --> EmojiGroup["Emoji: autocomplete"]
         EKR --> SelectAll["Ctrl+A: progressive"]
+        EKR --> BoldItalic["Ctrl+B/I: formatting"]
+        EKR --> TabGroup["Tab: indent/table/spaces"]
+        EKR --> MarkdownRouter["_markdownKeydownRouter"]
     end
 ```
 
@@ -37,7 +40,8 @@ flowchart TD
 |------|----------|--------|-------|-------------|
 | 1 | `_attachDialogKeyboard(container, opts)` | Dialog/popup/dropdown element | Bubble | Called per-dialog; one handler per container |
 | 2 | `_globalKeydownRouter(e)` | `document` | Capture | Registered once at startup |
-| 3 | `_setupEditorKeyboard(ea, ...)` | `ea` (editable area) | Capture | Called once per editor initialization |
+| 3 | `_editorKeydownRouter(e)` | `ea` (editable area) | Capture | Called once per editor initialization |
+| 3 | `_markdownKeydownRouter(e)` | `ma` (markdown area) | Capture | Called once per editor initialization |
 
 ## Tier 1: `_attachDialogKeyboard(container, opts)`
 
@@ -249,20 +253,51 @@ Reverse bubble **must** be first. This was previously enforced by handler regist
 #### Backspace Priority
 
 1. `_handleChecklistBackspace` — Remove checkbox or delete checklist item
-2. `_handleCodeBlockBackspace` — Revert/delete/exit code block
-3. `_handleAdmonitionBackspace` — Exit empty admonition on backspace
-4. `_handleMarkdownRevert` — Revert inline markdown elements, delete blocks
+2. `_handleMarkdownAutoConvert` — Revert inline markdown elements, delete blocks; also handles image delete for Delete key
+3. `_handleCodeBlockBackspace` — Revert/delete/exit code block
+4. `_handleAdmonitionBackspace` — Exit empty admonition on backspace
 
 #### Other Keys
 
 | Key | Handler |
 |-----|---------|
 | Space | `_handleMarkdownAutoConvert` — Block-level markdown conversions |
-| Delete | `_handleImageDelete` — Delete selected image |
+| Delete | `_handleMarkdownAutoConvert` — Delete selected image (inside `_ekh.mdAuto`) |
 | ArrowLeft/Right | `_handleChecklistArrows` — Cursor normalization around checkboxes |
 | Ctrl+A | `_handleSelectAllInBlock` — Progressive select-all |
+| Ctrl+B | Bold — `_compat.exec('bold')` + `_finalizeUpdate` |
+| Ctrl+I | Italic — `_compat.exec('italic')` + `_finalizeUpdate` |
+| Tab | Context-dependent: list indent/outdent (via `_listIndentOutdentByDOM`), table cell navigation, or insert 4 spaces |
+| Shift+Tab | List outdent or previous table cell |
 | Emoji keys | `_handleEmojiKey` — Ctrl+Space, arrows, Enter/Tab, Backspace, printable (when autocomplete visible) |
-| Various | `_maybeClearPendingBacktick` — Clear pending backtick state on Escape/Enter/arrows/Home/End/Page keys |
+| All keys | `_ekh.inlineCodeClear` — Invoked on every keydown; clears pending backtick state when key is Escape, Enter, arrows, Home, End, or PageUp/PageDown |
+
+### Markdown Area Handler (`_markdownKeydownRouter`)
+
+A second capture-phase keydown handler registered on `wysiwygEditor.markdownArea` inside the same `_setupEditorKeyboard` IIFE. Handles shortcuts that apply in markdown editing mode.
+
+| Key | Handler |
+|-----|---------|
+| Tab | List indent or insert 4 spaces (delegates to `_applyMarkdownListIndentInternal`) |
+| Shift+Tab | List outdent (delegates to `_applyMarkdownListOutdentInternal`) |
+| Ctrl+B | Bold — wraps selection in `**` via `_applyMarkdownFormatting(boldCfg)` |
+| Ctrl+I | Italic — wraps selection in `*` via `_applyMarkdownFormatting(italicCfg)` |
+
+All handlers call `_flushHistoryCapture()` before changes. Tab calls `_finalizeUpdate(ma.value)` after; Cmd+B and Cmd+I delegate to `_applyMarkdownFormatting()` which calls `_finalizeUpdate` internally. The `_navEditMode` and `_compat.isComposing(e)` guards are checked at the top.
+
+### Vendor `_handleKeyDownShared` Suppression
+
+The vendor `editor.js` previously handled Tab and Cmd+Z/Y in its own bubble-phase `_handleKeyDownShared` method. This is now patched to a no-op from the integration layer:
+
+```javascript
+proto._handleKeyDownShared = function () {};
+```
+
+The vendor's `_onAreaKeyDown` wrapper still runs `setTimeout(() => updateToolbarFn(), 0)` on every keydown, which keeps toolbar active-state updates intact. Only the shortcut dispatch is suppressed.
+
+### Selection Preservation Contract
+
+Tier 3 formatting shortcuts (Cmd+B, Cmd+I) and editing shortcuts (Tab) that modify content must preserve the user's cursor position and text selection. The shortcuts call `_compat.exec()` which is responsible for selection-safe DOM operations — including Gecko tag normalization that replaces `<b>` with `<strong>` and `<i>` with `<em>` (see `DESIGN-browser-compatibility.md`). After `_compat.exec()` returns and `_finalizeUpdate()` completes, the selection must remain as it was before the shortcut (covering the same text, now formatted). See `cursor-selection-preservation.mdc` for the full verification checklist.
 
 ### Dataset Guard
 
@@ -293,4 +328,4 @@ To add a new editor keyboard handler:
 
 7. **`enterGuard` for special cases.** Dropdowns with autocomplete or other sub-UIs that consume Enter use `opts.enterGuard` to conditionally bypass dialog-level Enter handling.
 
-8. **Shift bypass in Tier 3.** The editor router checks `e.shiftKey` for Enter to allow Shift+Enter to pass through to browser default. This check is in the router, not in individual handlers.
+8. **Shift bypass in Tier 3.** Each Enter handler (reverseBubble, listEnterExit, admonitionEnterExit, blockquoteEnterExit, headingEnter, hiddenTitleAdmonitionEnter, codeBlockEnterExit) checks `e.shiftKey` individually and returns early when Shift is held, allowing Shift+Enter to pass through to browser default. The router has no central shift check.

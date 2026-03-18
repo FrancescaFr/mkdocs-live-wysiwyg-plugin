@@ -144,7 +144,7 @@ class LiveWysiwygPlugin(BasePlugin):
         if self._link_check_server is not None:
             return config
 
-        from .link_check_server import start_link_check_server
+        from .api_server import start_link_check_server
 
         dev_addr = config.get("dev_addr")
         host = dev_addr.host if dev_addr else "127.0.0.1"
@@ -335,7 +335,7 @@ class LiveWysiwygPlugin(BasePlugin):
                 self._nav_title_cache = {}
             self._nav_title_cache[src] = page.title
 
-        from .link_check_server import _extract_refs
+        from .api_server import _extract_refs
 
         self._link_index[src] = _extract_refs(markdown)
         return markdown
@@ -358,10 +358,13 @@ class LiveWysiwygPlugin(BasePlugin):
         vendor_dir = parent_dir / "vendor"
         integration_js = parent_dir / "live-wysiwyg-integration.js"
         admonition_extension_js = parent_dir / "mkdocs-admonition-extension.js"
+        browser_compat_js = parent_dir / "browser-compat.js"
         with open(integration_js, "r", encoding="utf-8") as f:
             integration_script = f.read()
         with open(admonition_extension_js, "r", encoding="utf-8") as f:
             admonition_extension_script = f.read()
+        with open(browser_compat_js, "r", encoding="utf-8") as f:
+            browser_compat_content = f.read()
 
         autoload_wysiwyg = self.config.get("autoload_wysiwyg")
         preamble_parts = []
@@ -531,6 +534,7 @@ class LiveWysiwygPlugin(BasePlugin):
             f'<style>{admonition_css_content}</style>'
             f'<script>{marked_js_content}</script>'
             f'<script>{admonition_extension_script}</script>'
+            f'<script>{browser_compat_content}</script>'
             f'<script>{editor_js_content}</script>'
             f'<script>{preamble}\n{integration_script}</script>'
         )

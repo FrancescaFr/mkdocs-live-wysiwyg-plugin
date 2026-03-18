@@ -151,7 +151,7 @@ Only applies when alt is empty on open. Strips path, removes extension, replaces
 |-------|---------|--------|
 | URL (new links only) | Clipboard content if URL | `navigator.clipboard.readText()` (async, graceful fallback) |
 
-Only attempted when creating a new link (not editing an existing one) and the URL field would be the default `https://`. If clipboard read fails (permissions denied, non-URL content), the field keeps its default. This is async and runs after the initial focus.
+Only attempted when creating a new link (not editing an existing one) and the URL field would be the default `https://`. If clipboard read fails (permissions denied, non-URL content), the field keeps its default. This is async and runs after the initial focus. Browser-specific clipboard behavior (including Safari user-gesture timing) is documented in [DESIGN-browser-compatibility.md](DESIGN-browser-compatibility.md).
 
 #### Insert Image (`createImageInsertDropdown`)
 
@@ -201,6 +201,8 @@ Triggered on the Insert click or URL blur when alt is empty and a URL has been t
 | Caution Popup | `_showCautionPopup` | Resolve btn | ESC only |
 | Review Changes | `_showReviewChangesPopup` | first element | Already has ESC |
 | Dead Link Panel | `_showDeadLinkPanel` | close btn | ESC to dismiss |
+| Asset Preview | `_showAssetPreviewPopup` | Expand btn | Small preview with expand; ESC + Enter |
+| Asset Lightbox | `_showAssetLightbox` | Close btn | Modal image/text viewer; ESC to dismiss, click-outside backdrop |
 
 ### Excluded (No Changes)
 
@@ -237,3 +239,7 @@ Triggered on the Insert click or URL blur when alt is empty and a URL has been t
 ## Implementation
 
 All dialog keyboard handling is implemented through `_attachDialogKeyboard(container, opts)` — a centralized function that encapsulates the rules above. See [DESIGN-centralized-keyboard.md](DESIGN-centralized-keyboard.md) for the full architecture and function signature.
+
+## Layout Subsystem
+
+Dropdown and popup positioning (z-index, `position:fixed`, viewport flip), cross-dropdown dismissal (`_dismissAllDropdowns()`), and text field auto-expansion are governed by the Layout subsystem. See [DESIGN-layout.md](DESIGN-layout.md) for the authoritative contracts.

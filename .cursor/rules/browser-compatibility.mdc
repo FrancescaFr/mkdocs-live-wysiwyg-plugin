@@ -1,0 +1,48 @@
+---
+description: Browser Compatibility — centralized browser quirk handling via browser-compat.js
+globs: 
+alwaysApply: true
+---
+# Browser Compatibility
+
+The `browser-compat.js` file is the single authority for all browser-specific detection, normalization, and workarounds. It exposes `window.LiveWysiwygCompat`, captured as `var _compat = window.LiveWysiwygCompat` at the top of the integration IIFE.
+
+## Rules
+
+1. **All `execCommand` calls in the integration script must use `_compat.exec()`.** Never call `document.execCommand` directly from `live-wysiwyg-integration.js`. The global `document.execCommand` patch handles calls from `vendor/editor.js` transparently.
+
+2. **All keyboard routers must check `_compat.isComposing(e)` before dispatch.** Tier 2 (`_globalKeydownRouter`) and Tier 3 (`_editorKeydownRouter`) must return early when `isComposing` is true. This prevents handler dispatch during IME composition on all browsers.
+
+3. **Chrome location object restrictions.** Chrome (and most modern browsers) treat `window.location` as a security-critical object. Its native properties (`reload`, `assign`, `replace`, `href`) are non-configurable on the `Location` prototype. `Object.defineProperty(location, 'reload', { ... })` and similar attempts throw `TypeError`. All location property overrides are centralized in `_compat.installLocationGuard()` with try/catch. Never override location properties outside the compat layer.
+
+4. **All clipboard access must use `_compat` methods.** Use `_compat.readClipboardText()` for async reads, `_compat.getClipboardData(e, type)` for paste event data, and `_compat.setClipboardData(e, type, data)` for cut/copy. Never access `e.clipboardData.getData()` or `e.clipboardData.setData()` directly — the compat wrappers provide try/catch protection against sandbox restrictions, untrusted events, and quota errors.
+
+5. **Safari clipboard reads must be cached before `requestAnimationFrame`.** Call `_compat.cacheClipboardForGesture()` synchronously in click handlers before deferring work to `requestAnimationFrame`. Safari's strict user-gesture timing rejects `readText()` calls inside rAF callbacks.
+
+6. **New browser-specific code must be added to `browser-compat.js`.** Do not scatter browser conditionals in the integration script. If a workaround requires engine detection, add it to the compat layer and expose a normalized API.
+
+7. **Engine detection is feature-based, never userAgent string parsing.** Use CSS feature detection (`CSS.supports`, style property presence) to identify Blink, Gecko, and WebKit. `navigator.userAgent` is unreliable and should never be used for engine detection.
+
+8. **CSS vendor prefixes must be paired with unprefixed equivalents.** When injecting styles via JS, always include both `-webkit-` prefixed and unprefixed versions. Example: `-webkit-appearance:none;appearance:none;`. This applies to `-webkit-mask-*`, `-webkit-backdrop-filter`, and `-webkit-user-select`.
+
+9. **`getData`/`setData` on `clipboardData` must be wrapped in try/catch.** Firefox may throw on untrusted events or sandbox contexts. All sites are covered by `_compat.getClipboardData` and `_compat.setClipboardData`.
+
+10. **Use `_compat.getRangeRect(range)` for collapsed range positioning.** Safari and Firefox can return zero-rect for `getBoundingClientRect()` on collapsed ranges. The compat method handles this with temporary span insertion.
+
+11. **Use `_compat.isPrintableKey(e)` instead of `e.key.length === 1` checks.** The `isPrintableKey` method excludes dead keys (`'Dead'`), process keys (`'Process'`), and modifier combos, preventing false positives on Firefox during IME input.
+
+12. **Use `_compat.caretRangeFromPoint(x, y)` for drop-position detection.** Never call `document.caretRangeFromPoint` or `document.caretPositionFromPoint` directly. The compat method normalizes Blink/WebKit (`caretRangeFromPoint` returns `Range`) and Gecko (`caretPositionFromPoint` returns `CaretPosition`, converted to `Range`).
+
+13. **Drag-and-drop handlers must respect DataTransfer protected mode.** During `dragover`/`dragenter`/`dragleave`, only `e.dataTransfer.types` is accessible. `getData()` must only be called in the `drop` handler. Never rely on Firefox's non-standard early data access. Use `e.dataTransfer.types` (not `e.dataTransfer.items`) for type detection during drag events — `items` is unreliable in Safari.
+
+14. **Document browser quirks centrally.** Browser-specific workarounds and known quirks must be documented in `docs/design/ui/DESIGN-browser-compatibility.md`. New browser-specific code should add an entry to that catalog.
+
+15. **`vendor/editor.js` must not be modified.** The global `document.execCommand` and `document.queryCommandState` patches in `browser-compat.js` intercept all calls from the vendor file transparently. Any vendor-level normalization must be implemented in the compat layer's global patches.
+
+16. **Compat layer DOM operations must preserve the browser Selection.** Any function in `browser-compat.js` that modifies live DOM nodes (e.g., `_normalizeTagName` replacing `<b>` with `<strong>`) must save the Selection Range before modification and restore it after. This is required by the Cursor/Selection Preservation cardinal rule (`cursor-selection-preservation.mdc`). The Keyboard subsystem (`keyboard.mdc`) relies on `_compat.exec()` to return with the selection intact so that formatting shortcuts do not lose the user's selection.
+
+17. **Engine detection is available for CSS layout normalization.** `_compat.engine` (`'blink'|'gecko'|'webkit'`) can be used to conditionally inject engine-specific CSS overrides in `_getFocusModeCSS()` and other CSS-building functions. This is the designated mechanism for fixing cross-browser layout rendering differences. Layout-specific fixes are documented in `DESIGN-layout.md` and cross-referenced from `DESIGN-browser-compatibility.md`. See `layout.mdc` for layout authority rules.
+
+## Design Document
+
+See `docs/design/ui/DESIGN-browser-compatibility.md`.

@@ -20,7 +20,7 @@ Core systems:
 
 2. **Dedicated WebSocket** (`_getOrCreateBulkWs`, `_wsSend`, `_wsNewFile`, etc.): Lazily created connection to the live-edit server for reading/writing arbitrary files. Used for AJAX navigation content loading, bulk operations, frontmatter updates on other pages, and mkdocs.yml editing. `_wsSend` handles `get_contents`, `set_contents`, and `delete_file` (generic `{action, path, contents}` format). `_wsNewFile` is separate because the upstream server expects `{action: 'new_file', path, title}` — **not** `contents`. Both `_wsSend` and `_wsNewFile` register `close` and `error` event handlers alongside the `message` handler: if the server crashes (e.g., `FileNotFoundError` on `get_contents` for a missing file), the promise rejects immediately instead of waiting for the 15-second timeout. On close/error, `_bulkWs` is set to `null` so the next operation creates a fresh connection.
 
-3. **Livereload Guard & Rebuild Polling** (`_installReloadGuard`, `_removeReloadGuard`, `_waitForRebuild`, `_waitForRebuildAndReconnect`): Suppresses page reloads during batch processing via two layers: (a) a permanent XHR tracking hook (`_trackedLivereloadXHRs`) installed at script load time that records every XHR opened to `/livereload/` — when `_installReloadGuard` activates, all tracked XHRs are aborted, killing in-flight livereload long-polls before they can respond and trigger `location.reload()`, (b) patching `XMLHttpRequest.prototype.open/send` to block new livereload XHRs opened during the guard period. `Location.prototype.reload` is NOT patched (it is non-writable/non-configurable in Chrome). Our own rebuild detection uses `fetch()` — completely independent of XHR — to poll `/livereload/` and detect when MkDocs finishes rebuilding after a write. The guard is idempotent and fully reversible (`_removeReloadGuard` restores to the tracking hook). `_waitForRebuildAndReconnect` chains: close bulk WebSocket → poll for rebuild → reconnect WebSocket.
+3. **Livereload Guard & Rebuild Polling** (`_installReloadGuard`, `_removeReloadGuard`, `_waitForRebuild`, `_waitForRebuildAndReconnect`): Suppresses page reloads during batch processing via two layers: (a) a permanent XHR tracking hook (`_trackedLivereloadXHRs`) installed at script load time that records every XHR opened to `/livereload/` — when `_installReloadGuard` activates, all tracked XHRs are aborted, killing in-flight livereload long-polls before they can respond and trigger `location.reload()`, (b) patching `XMLHttpRequest.prototype.open/send` to block new livereload XHRs opened during the guard period. `Location.prototype.reload` is NOT patched (it is non-writable/non-configurable in Chrome). Our own rebuild detection uses `fetch()` — completely independent of XHR — to poll `/livereload/` and detect when MkDocs finishes rebuilding after a write. See [DESIGN-browser-compatibility.md](DESIGN-browser-compatibility.md) for Chrome Location object restrictions. The guard is idempotent and fully reversible (`_removeReloadGuard` restores to the tracking hook). `_waitForRebuildAndReconnect` chains: close bulk WebSocket → poll for rebuild → reconnect WebSocket.
 
 4. **Link Rewriting** (`_rewriteLinksInContent`, `_rewriteInboundLinks`): Rewrites relative paths in moved documents (outbound) and across all referencing documents (inbound). Respects exclusion zones (code blocks, inline code, HTML comments). Preserves anchors and query strings. Case-sensitive matching.
 
@@ -176,11 +176,21 @@ All batch state (operations, focus target, failures, path tracking) is held **in
 
 Every operation pushes to undo stack, clears redo stack. Undo pops and computes inverse operation. Redo re-applies. New action after undo clears redo (forks history).
 
+### Content Submenu
+
+The Content button in the focus mode toolbar opens a submenu (`_createPageSubmenu`) with Rename Page, New Page, Delete Page, Find dead links, and a new "Migrate to mkdocs-nav-weight" item. The migrate item calls `_startMigrationFlow()`, which has a Phase 0 hard prerequisite: it checks `cfg.installed` and aborts with an install prompt if mkdocs-nav-weight is not installed.
+
 ## mkdocs-nav-weight Integration
+
+### Nav Controls Always Rendered
+
+Nav controls (arrows and gear) are always rendered for every nav item regardless of `nwConfig.enabled` or `_ymlHasNavKey`. The old gates `(_navEditMode || isHiddenSection || nwConfig.enabled) && !_ymlHasNavKey(...)` have been replaced with unconditional rendering. Arrow movements are a no-op when `_ymlHasNavKey` is true (with a deferred warning), but all other operations (gear, rename, delete, create) work regardless of nav key or nav-weight status.
 
 ### Arrow Navigation
 
 All arrow moves operate exclusively on the navData tree. Move functions accept only the navData `item` object — no DOM elements. `_findNavItemInTree(item._uid)` locates the item's position (parent array + index) for splice operations. After the navData mutation, `_setNavItemFocused(item)` marks the moved item in navData, then `_commitNavSnapshot()` triggers `_renderNavFromSnapshot()` which rebuilds the DOM with the `--focused` class applied by `_buildNavItems` and scrolls the focused item to center.
+
+**Nav-key guard**: When `_ymlHasNavKey(_virtualMkdocsYml)` is true (mkdocs.yml has a hand-written `nav:` key), arrow movement is blocked at the top of `_handleArrowClick`. The move is a no-op; no movement function is called. A deferred warning is seeded lazily (see "Deferred Nav-Key Migration Warning" under Content Integrity).
 
 - **Up/Down**: Reorder within folder. Sections (folders) are treated as same-level peers — a page moves one position at a time past sections, not over them. The moved page gets a midpoint weight between its new adjacent siblings (which may be section index.md weights via `_getItemWeight`).
 - **Left**: Move to parent folder (no-op and hidden at root)
@@ -232,7 +242,15 @@ The effective default weight is `default_page_weight` from the nav-weight config
 
 **Folder index.md as peers**: Folder `index.md` pages with `retitled: true` and `empty: true` participate in the same-level weight distribution alongside regular pages. Their effective default for UI warnings is `default_page_weight` (not `index_weight`). The `_executeMoveWeightOp` function uses `_getItemWeight()` (which reads `index_meta.weight` for sections) to correctly include section weights in midpoint calculations. Root index.md is filtered out of the siblings list.
 
+### Migration Flow
+
+`_startMigrationFlow` is a unified pipeline handling both nav-key migration (existing 7-phase flow) and alphabetical-ordering migration (simpler path for users without a nav key). Phase 0 checks `cfg.installed` and aborts with an install prompt if mkdocs-nav-weight is not installed. Phase 0b checks if nav weights are already active (`cfg.enabled && !hasNavKey`) and aborts with "No migration needed." When a nav key exists, `_startMigrationFlowNavKey` runs the full 7-phase nav-to-weight migration. When no nav key exists, `_startMigrationFlowAlphabetical` runs the simpler alphabetical-ordering path. See [DESIGN-nav-migration.md](DESIGN-nav-migration.md) for the nav-key migration phases.
+
 ## Content Integrity
+
+- **Top warnings on page load**: `_seedNavTopWarnings()` no longer adds proactive warnings. The top warning area starts empty.
+
+- **Deferred nav-key migration warning**: When the user first attempts an arrow move while `_ymlHasNavKey` is true, `_seedNavKeyMigrationWarning()` is called lazily (idempotent). It adds a top-level warning with `actionId: 'start-migration'` and `actionText: 'Migrate to mkdocs-nav-weight'`. `_pushNavKeyItemWarning(item)` shows a transient tooltip ("Reordering blocked — see warning above") on the clicked item.
 
 - **Exclusion zones**: Code blocks, inline code, HTML comments are never modified
 - **Anchor preservation**: `#section` and `?query` split off, path rewritten, reassembled
@@ -272,3 +290,7 @@ Each `set_contents` / `new_file` / `delete_file` triggers a MkDocs rebuild. The 
 - **AJAX save routing**: The `page_path` variable in the live-edit IIFE is not accessible from outside. After AJAX navigation, saves are routed through the WYSIWYG plugin's dedicated WebSocket (`_wsSetContents`) instead.
 
 See `.cursor/rules/focus-nav-menu.mdc` for detailed constraints and future expansion notes.
+
+## Layout Subsystem
+
+Nav sidebar width (`15.8rem` + `--_nav-extend`), controls positioning, section expand/collapse animation, scroll-to-focused, and the `< 76.25em` responsive breakpoint are governed by the Layout subsystem. See [DESIGN-layout.md](DESIGN-layout.md) for the authoritative contracts.

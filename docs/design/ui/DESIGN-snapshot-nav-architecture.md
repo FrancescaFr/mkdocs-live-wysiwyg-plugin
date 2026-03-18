@@ -187,6 +187,16 @@ topWarnings: ['warning message', ...]
 topInfo: ['info message', ...]
 ```
 
+### Top-Level Warning Seeding (Lazy)
+
+The top-level warning area uses **lazy seeding** — no proactive warnings are shown on page load.
+
+**`_seedNavTopWarnings()`** sets `_navTopWarnings = []` (empty). The top warning area starts empty. Previously, this function proactively added warnings on load (e.g., "pip install mkdocs-nav-weight" if not installed, "Migrate to mkdocs-nav-weight" if not enabled or if nav key exists). Those checks have been moved or removed.
+
+**Nav-key migration warning** is seeded **lazily** by `_seedNavKeyMigrationWarning()` when the user first attempts to move a nav item via arrow clicks and `_ymlHasNavKey` is true. The function is idempotent — it checks `_hasNavTopWarning('nav-key-blocks-reorder')` before adding; if the warning already exists, it returns. On first invocation, it mutates `_navTopWarnings` and calls `_commitNavSnapshot()` to re-render.
+
+**"pip install" check** is now part of Phase 0 of the migration flow (`_startMigrationFlow`), not a proactive warning. The user encounters it when starting migration, not on page load.
+
 ### Batch Suppression Flag
 
 `_suppressWarningSnapshot` (global boolean). When `true`, `_addCautionPage` and `_addDeadLinksForPage` modify navData without calling `_commitNavSnapshot()`. The caller sets this flag, performs all warning operations, unsets it, then calls `_commitNavSnapshot()` once.
@@ -445,7 +455,7 @@ This covers: asset-only folders, folders containing only headless pages, and par
 
 ### Move Operations
 
-Asset moves are collected as `assetMoves` in the desired state and executed via `_apiPost('/move-file', ...)` through the API server (`link_check_server.py`). Binary files never use the WebSocket for any operation. The API server's `/move-file` endpoint creates parent directories automatically and returns the result.
+Asset moves are collected as `assetMoves` in the desired state and executed via `_apiPost('/move-file', ...)` through the API server (`api_server.py`). Binary files never use the WebSocket for any operation. The API server's `/move-file` endpoint creates parent directories automatically and returns the result.
 
 ### Delete Operations
 
@@ -831,3 +841,7 @@ Key: `live_wysiwyg_post_save_messages` in `localStorage`. Value: JSON array of `
 - A scrollable message list with type-specific icons
 - A "Dismiss" button in the footer
 - Fade-in on appearance; fade-out on dismiss or auto-dismiss
+
+## Layout Subsystem
+
+Notification panel positioning (`z-index:100002`), pipeline progress bar positioning (`z-index:100001`), and toast positioning (`z-index:100000`) are governed by the Layout subsystem z-index registry. See [DESIGN-layout.md](DESIGN-layout.md) for the authoritative contracts.
