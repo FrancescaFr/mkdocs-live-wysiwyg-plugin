@@ -190,7 +190,7 @@ Triggered on the Insert click or URL blur when alt is empty and a URL has been t
 |--------|----------|------------|-----------|
 | Code Block Settings | `createSettingsDropdown` | autoIndentBtn | autoIndentBtn -> spacesBtn -> tabsBtn -> size buttons |
 | Admonition Settings | `createAdmonitionSettingsDropdown` | typeSelect | typeSelect -> placement -> collapsible -> collapsed -> detailsTag -> hideTitle |
-| Focus Mode Settings | `_createSettingsDropdown` | first checkbox | autolaunchCb -> autofocusCb -> focusRemainCb |
+| Focus Mode Settings | `_createSettingsDropdown` | first checkbox | autolaunchCb (single checkbox) |
 | Page Submenu | `_createPageSubmenu` | first item | sequential through items |
 
 ### Informational Popups
@@ -203,6 +203,7 @@ Triggered on the Insert click or URL blur when alt is empty and a URL has been t
 | Dead Link Panel | `_showDeadLinkPanel` | close btn | ESC to dismiss |
 | Asset Preview | `_showAssetPreviewPopup` | Expand btn | Small preview with expand; ESC + Enter |
 | Asset Lightbox | `_showAssetLightbox` | Close btn | Modal image/text viewer; ESC to dismiss, click-outside backdrop |
+| Help Modal | `_showHelp` | Close btn | Layer 5 tabbed help reference; ESC + Enter + backdrop click; arrow keys navigate tabs. See [DESIGN-help-system.md](DESIGN-help-system.md) |
 
 ### Excluded (No Changes)
 

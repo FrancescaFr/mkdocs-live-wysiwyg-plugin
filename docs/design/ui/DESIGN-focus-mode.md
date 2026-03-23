@@ -52,8 +52,8 @@ The `--_nav-extend` CSS variable is defined on `.live-wysiwyg-focus-grid` as `cl
 |---|---|
 | **Focus Mode toolbar button** (expand icon, right end of toolbar) | Editor must be active |
 | **Browser fullscreen** (`fullscreenchange` event) | Editor is enabled (cookie/autoload) AND page is in edit mode (not read-only). If the editor is disabled, the event is ignored. |
-| **"Focus Mode by default" setting** (`live_wysiwyg_autofocus`) | When enabled, focus mode launches automatically after the editor activates |
-| **"Auto-launch editor on page load" setting** (`live_wysiwyg_autolaunch`) | Combined with autofocus, enables a fully automatic focus mode experience |
+| **Editor activation** | Focus mode always launches when the editor activates (regardless of settings). This includes manual Edit button clicks, auto-launch, and early overlay reconnection. |
+| **"Auto-launch editor" setting** (`live_wysiwyg_autolaunch`) | When enabled, auto-clicks the Edit button on page load, which then enters focus mode |
 
 ### Exit Points
 
@@ -64,6 +64,8 @@ The `--_nav-extend` CSS variable is defined on `.live-wysiwyg-focus-grid` as `cl
 | **`destroyWysiwyg()`** | Calls `exitFocusMode()` first if active |
 
 Browser fullscreen exit does **not** auto-exit focus mode. The user must explicitly exit.
+
+`exitFocusMode()` deletes the `live_wysiwyg_focus_nav` setting so that subsequent page navigations do not re-enter focus mode. The setting is only set to `'1'` by intentional reload paths (nav save, AJAX navigation fallback, popstate) that should preserve the focus mode session.
 
 ## Overlay Structure
 
@@ -84,8 +86,6 @@ div.live-wysiwyg-focus-overlay (position:fixed, inset:0, z-index:99990)
 │   ├── div.live-wysiwyg-focus-drawer-controls
 │   │   ├── div.live-wysiwyg-focus-mode-toggle (WYSIWYG | Markdown)
 │   │   ├── button (Page Management — Material only)
-│   │   ├── button.live-wysiwyg-focus-save-btn (Save)
-│   │   ├── button.live-wysiwyg-focus-discard-btn (Discard)
 │   │   └── button.live-wysiwyg-focus-settings-btn (⚙ Settings gear)
 │   └── div.live-wysiwyg-focus-drawer-toolbar-wrap
 │       └── .md-toolbar (reparented from editor wrapper)
@@ -157,7 +157,7 @@ The toolbar is the **same DOM element** moved between containers — never dupli
 - Default state: **open** (toolbar is visible on first use; state is persisted)
 - Toggle: hamburger icon button (toolbar toggle) in the header left area
 - Transition: `max-height` with `0.25s ease-in-out` (0 when closed, 260px when open)
-- Contents: mode toggle, Page Management button (Material only), save button, discard button, settings gear, and the WYSIWYG toolbar
+- Contents: mode toggle, Page Management button (Material only), settings gear, and the WYSIWYG toolbar
 - In **Markdown mode**, the toolbar wrap section is hidden (`display:none`) since WYSIWYG buttons don't apply; toggle, save, discard, and settings remain visible
 - `_updateToolbarHeight` sets the `--_toolbar-h` CSS variable from the drawer's `scrollHeight`, which feeds into `--_panel-h` for panel height calculations
 
@@ -171,18 +171,13 @@ The WYSIWYG/Markdown toggle in the drawer calls `wysiwygEditor.switchToMode()`. 
 
 When Markdown mode is active, the overlay gains the `focus-mode-markdown` class, which enables width-collapsing transitions on the sidebars (so the markdown textarea can expand into sidebar space when they are collapsed).
 
-## Save and Discard
+## Content Auto-Save
 
-### Save Button
+Focus mode uses automatic content saving — there are no Save or Discard buttons. Content is auto-saved to disk whenever the [Unified Content Undo](DESIGN-unified-content-undo.md) DAG captures a new history node (500ms debounce after typing pauses, or immediately at word boundaries). The undo/redo DAG is simultaneously persisted to `sessionStorage` so it survives page reloads.
 
-Delegates to `_doFocusModeSave()`:
-1. Calls `_doFocusSave()` which flushes pending content and triggers the upstream save
-2. If "Remain in Focus Mode on Save" is enabled (`live_wysiwyg_focus_remain`), refreshes content in place via WebSocket (`_wsGetContents` → `_loadContent`) without a full page reload
-3. Keyboard shortcut: **Ctrl+S** (or Cmd+S on Mac)
+**Ctrl+S** (or Cmd+S): If the nav menu has pending edits (`_isNavSaveable()`), triggers a nav menu save. Otherwise, flushes pending typing into a DAG node and forces an immediate disk save.
 
-### Discard Button
-
-Resets content to the last saved state. Visibility is controlled by `_isDocDirty()` — both Save and Discard buttons are shown/hidden together based on whether the document has unsaved changes.
+See [DESIGN-uninterrupted-content-save.md](DESIGN-uninterrupted-content-save.md) for the full auto-save architecture.
 
 ## Nav Sidebar (Left)
 
@@ -243,11 +238,9 @@ The TOC panel occupies the right sidebar (12.1rem). It uses `position:sticky; to
 
 ## Settings Dropdown
 
-A gear button (⚙) in the drawer controls opens a dropdown with persistent checkboxes:
+A gear button (⚙) in the drawer controls opens a dropdown with a single persistent checkbox:
 
-- **Auto-launch editor on page load** (`live_wysiwyg_autolaunch`)
-- **Focus Mode by default** (`live_wysiwyg_autofocus`)
-- **Remain in Focus Mode on Save** (`live_wysiwyg_focus_remain`, default enabled)
+- **Auto-launch editor** (`live_wysiwyg_autolaunch`) — When enabled, auto-clicks the Edit button on page load, entering focus mode automatically. When disabled, the page loads in readonly mode. Manually clicking the Edit button always enters focus mode regardless of this setting.
 
 ## Palette Button
 
@@ -261,7 +254,7 @@ In the drawer controls (Material theme only), a "Page Management" button trigger
 
 | Shortcut | Action |
 |---|---|
-| **Ctrl/Cmd+S** | Save |
+| **Ctrl/Cmd+S** | Nav save (if nav edits pending), else flush + disk save |
 | **Ctrl/Cmd+.** | Toggle WYSIWYG / Markdown mode |
 | **Escape** | Exit focus mode / dismiss dialogs |
 
