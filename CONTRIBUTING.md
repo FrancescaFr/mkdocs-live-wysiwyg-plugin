@@ -14,9 +14,13 @@ This installs `mkdocs-live-edit-plugin` from PyPI along with the plugin in edita
 From the `mkdocs-live-wysiwyg-plugin` directory:
 
 ```bash
-../techdocs-preview.sh add_plugins --upgrade .
-../techdocs-preview.sh build
+./techdocs-preview.sh build
+./techdocs-preview.sh add_plugins --upgrade .
 ```
+
+You can launch readonly copies of documentation with.
+
+    ./techdocs-preview.sh -c -a docs -r
 
 ## Releasing
 
