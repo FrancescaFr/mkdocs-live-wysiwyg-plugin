@@ -63,11 +63,15 @@ The following is an annotated screenshot after running `techdocs-preview.sh init
 
 ## Requirements
 
+The following requirements are automtically managed by `techdocs-preview.sh` with `uv`.
+
 - Python 3.10 or higher.
-- mkdocs-live-edit-plugin (must be installed and configured)
+- mkdocs-live-edit-plugin (must
 - mkdocs >= 1.5
 
 ## Installation
+
+If not using  `techdocs-preview.sh`:
 
 ```bash
 pip install mkdocs-live-wysiwyg-plugin
