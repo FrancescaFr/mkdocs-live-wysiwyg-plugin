@@ -24,6 +24,8 @@ jobs:
     needs: vsix-build
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -38,12 +40,21 @@ jobs:
         run: echo "version=$(grep -oP '^version = "\K[^"]+' pyproject.toml)" >> $GITHUB_OUTPUT
 
       - name: Publish to GitHub Releases
-        run: make -C vsx-src publish-github TAG=v${{ steps.version.outputs.version }} GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          gh release create "$TAG" vsx-src/dist/*.vsix \
+            --repo "${{ github.repository }}" \
+            --title "$TAG" \
+            --generate-notes \
+            --verify-tag \
+          || gh release upload "$TAG" vsx-src/dist/*.vsix \
+            --repo "${{ github.repository }}" \
+            --clobber
 
-      # TODO: enable after setting up VSCE_PAT secret
+      # TODO: enable after setting up VSCE_PAT and OVSX_PAT secrets
+      # - name: Build publish Docker image
+      #   run: make -C vsx-src pre-build && docker build -t mkdocs-wysiwyg-vsx-builder vsx-src/
       # - name: Publish to VS Code Marketplace
       #   run: make -C vsx-src publish-marketplace VSCE_PAT=${{ secrets.VSCE_PAT }}
-
-      # TODO: enable after setting up OVSX_PAT secret
       # - name: Publish to Open VSX
       #   run: make -C vsx-src publish-openvsx OVSX_PAT=${{ secrets.OVSX_PAT }}

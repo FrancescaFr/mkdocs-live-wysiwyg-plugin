@@ -1,4 +1,5 @@
 versions:
+  gh: 2.89.0
   uv: 0.11.2
   yq: 4.52.5
 checksums:
@@ -22,6 +23,16 @@ checksums:
     windows:
       arm64: 236867affa7f18701d4c763cf16b6df962cf4f7e89a8570a5954cf94a38f41c7
       amd64: 47594981f3848a4b4447494adeca9555f908f7cf0a89c4da3fd0243a4631da1c
+  gh:
+    linux:
+      arm64: cd07f11ff1cfe58ecc6c172c06fa2986d5574b1fe7e1e00229632d1f18b4b63d
+      amd64: 540cffbf2146101a713284bc06427efbf370a40756c0356e3a0f8d1e038e7122
+    macOS:
+      arm64: 91d2de52d3aa2d87fe6b8baf18f20500031b337885642d2df225134bd0544acf
+      amd64: b3cbc5defffe19cfe53b60232d325ed2c5cea57f1c1c1140e3e213e3b832a6c6
+    windows:
+      arm64: ''
+      amd64: ''
 
 defaults: &defaults
   dest: '${DESTINATION_DIR:-/usr/local/bin}'
@@ -66,3 +77,36 @@ utility:
     extension:
       windows: .exe
     download: '${GITHUB_DOWNLOAD_MIRROR:-https://github.com}/mikefarah/yq/releases/download/v${version}/yq_${os}_${arch}${extension}'
+  gh:
+    <<: *defaults
+    os:
+      Linux: linux
+      Darwin: macOS
+      Windows: windows
+    arch:
+      x86_64: amd64
+      aarch64: arm64
+    extension:
+      default: tar.gz
+      macOS: zip
+      windows: zip
+    download: '${GITHUB_DOWNLOAD_MIRROR:-https://github.com}/cli/cli/releases/download/v${version}/gh_${version}_${os}_${arch}.${extension}'
+    default_download_extract: |
+      trap '[ ! -f /tmp/file.zip ] || rm -f /tmp/file.zip' EXIT
+      curl -sSfL ${download} | ${extract}
+    extract:
+      macOS: |
+        {
+          cat > /tmp/file.zip
+          unzip -o -j -d ${dest} /tmp/file.zip '*/bin/gh'
+        }
+      linux: tar -xzC ${dest}/ --no-same-owner --strip-components=2 gh_${version}_${os}_${arch}/bin/gh
+      windows: |
+        {
+          cat > /tmp/file.zip
+          unzip -o -j -d ${dest} /tmp/file.zip 'bin/gh.exe'
+        }
+    pre_command: |
+      if [ "${checksum_failed:-true}" = true ]; then
+        rm -f ${dest}/${utility}
+      fi
