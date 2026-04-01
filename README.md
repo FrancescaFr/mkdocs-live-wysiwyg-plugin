@@ -8,11 +8,13 @@ An all-in-one editor for GitHub and mkdocs documentation.  Available from an
 extension store above or from GitHub release.  Alternately available as a simple
 shell script.
 
-1. Add [techdocs-preview.sh][1] to your `$PATH`.
-2. Edit documentation across your projects.
+Right click on `mkdocs.yml` to start the mkdocs server and start editing files directly from the mkdocs interface.
 
 <details class="note">
 <summary>📝 A small CLI tutorial (click to expand)</summary>
+
+1. Add [techdocs-preview.sh][1] to your `$PATH`.
+2. Edit documentation across your projects.
 
 ## Try it out
 
