@@ -177,16 +177,29 @@ function addSuperfencesWithMermaidIfMissing(config: MkDocsConfig): void {
   }
 }
 
-function generateRestoreThemeHook(tmpDir: string, themeConfig: Record<string, unknown>, websocketPort: number, externalWsUrl: string): string {
-  const themeConfigPath = path.join(tmpDir, 'theme-config.yml');
-  fs.writeFileSync(themeConfigPath, yaml.dump(themeConfig));
-  const hookPath = path.join(tmpDir, 'restore_theme.py');
+function generateRestoreThemeHook(
+  workspaceDir: string,
+  themeConfig: Record<string, unknown>,
+  websocketPort: number,
+  externalWsUrl: string
+): string {
+  // 1. Create a safe home in the .vscode directory
+  const vscodeDir = path.join(workspaceDir, '.vscode');
+  if (!fs.existsSync(vscodeDir)) {
+    fs.mkdirSync(vscodeDir, { recursive: true });
+  }
 
+  // 2. Write the theme config
+  const themeConfigPath = path.join(vscodeDir, 'theme-config.yml');
+  fs.writeFileSync(themeConfigPath, yaml.dump(themeConfig));
+
+  // 3. Write the Python hook
+  const hookPath = path.join(vscodeDir, 'restore_theme.py');
   fs.writeFileSync(hookPath, `import os
 import yaml
 
 def on_config(config):
-    theme_file = os.path.join(os.environ.get('TMP_DIR', ''), 'theme-config.yml')
+    theme_file = r'${themeConfigPath}'
     if not os.path.exists(theme_file):
         return config
     with open(theme_file) as f:
@@ -262,7 +275,7 @@ export function generateMkdocsConfig(options: GenerateConfigOptions): string {
   if (themeName === 'material') {
     const themeObj = rendered.theme as Record<string, unknown>;
     // Pass the external URL strictly to the hook
-    const hookPath = generateRestoreThemeHook(tmpDir, themeObj, websocketPort, externalWsUrl);
+    const hookPath = generateRestoreThemeHook(workspaceDir, themeObj, websocketPort, externalWsUrl);
     rendered.hooks = [...(rendered.hooks ?? []), hookPath];
   }
 
