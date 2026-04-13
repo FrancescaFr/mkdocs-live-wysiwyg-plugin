@@ -1,9 +1,9 @@
 {
-  "name": "mkdocs-wysiwyg",
-  "displayName": "MkDocs WYSIWYG",
+  "name": "mkdocs-wysiwyg-custom",
+  "displayName": "MkDocs WYSIWYG - custom",
   "description": "WYSIWYG editor for MkDocs Material themed docs. Launch and manage the MkDocs live preview server from VS Code.",
   "version": "0.0.0",
-  "publisher": "mkdocs-wysiwyg",
+  "publisher": "francescafr",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
@@ -36,6 +36,16 @@
     "workspaceContains:**/*.md"
   ],
   "contributes": {
+    "configuration": {
+          "title": "MkDocs WYSIWYG",
+          "properties": {
+            "mkdocs-wysiwyg.useUserTheme": {
+              "type": "boolean",
+              "default": false,
+              "description": "Preserve custom MkDocs themes, palettes, and CSS during the live preview."
+            }
+          }
+        },
     "commands": [
       {
         "command": "mkdocs-wysiwyg.serve",
